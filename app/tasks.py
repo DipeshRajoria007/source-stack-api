@@ -175,19 +175,39 @@ def batch_parse_task(
     results = []
     total_files = 0
     processed_count = 0
+    start_time = time.time()
+    
+    # Get timestamps
+    from datetime import datetime
+    started_at = datetime.utcnow().isoformat() + "Z"
+    
+    # Get existing status to preserve created_at
+    existing_status = redis_client.get(f"job:{job_id}:status")
+    created_at = None
+    if existing_status:
+        try:
+            existing_data = json.loads(existing_status)
+            created_at = existing_data.get("created_at")
+        except:
+            pass
     
     try:
-        # Update job status
+        # Update job status with started_at timestamp
+        status_data = {
+            "status": "processing",
+            "progress": 0,
+            "total_files": 0,
+            "processed_files": 0,
+            "spreadsheet_id": spreadsheet_id,
+            "started_at": started_at
+        }
+        if created_at:
+            status_data["created_at"] = created_at
+        
         redis_client.setex(
             f"job:{job_id}:status",
             3600,  # 1 hour TTL
-            json.dumps({
-                "status": "processing",
-                "progress": 0,
-                "total_files": 0,
-                "processed_files": 0,
-                "spreadsheet_id": spreadsheet_id
-            })
+            json.dumps(status_data)
         )
         
         # List files in the folder (run async function in event loop)
@@ -201,17 +221,28 @@ def batch_parse_task(
         
         if not drive_files:
             logger.info(f"[Job {job_id}] No files found in folder")
+            completed_at = datetime.utcnow().isoformat() + "Z"
+            duration_seconds = time.time() - start_time
+            
+            status_data = {
+                "status": "completed",
+                "progress": 100,
+                "total_files": 0,
+                "processed_files": 0,
+                "spreadsheet_id": spreadsheet_id,
+                "results_count": 0,
+                "completed_at": completed_at,
+                "duration_seconds": round(duration_seconds, 2)
+            }
+            if created_at:
+                status_data["created_at"] = created_at
+            if started_at:
+                status_data["started_at"] = started_at
+            
             redis_client.setex(
                 f"job:{job_id}:status",
                 3600,
-                json.dumps({
-                    "status": "completed",
-                    "progress": 100,
-                    "total_files": 0,
-                    "processed_files": 0,
-                    "spreadsheet_id": spreadsheet_id,
-                    "results_count": 0
-                })
+                json.dumps(status_data)
             )
             redis_client.setex(f"job:{job_id}:results", 3600, json.dumps([]))
             return {"status": "completed", "results_count": 0}
@@ -291,7 +322,11 @@ def batch_parse_task(
                             candidate.get("linkedin") or "",
                             candidate.get("github") or ""
                         ]
-                        data_rows.append(row)
+                        # Convert all values to strings and ensure they're not None
+                        row = [str(cell) if cell is not None else "" for cell in row]
+                        # Only add non-empty rows (at least one field should have data)
+                        if any(cell and cell.strip() for cell in row):
+                            data_rows.append(row)
                 
                 if data_rows:
                     loop.run_until_complete(write_to_spreadsheet(spreadsheet_id, data_rows, bearer_token, skip_headers=True))
@@ -300,57 +335,96 @@ def batch_parse_task(
                         f"[Job {job_id}] Wrote batch: {len(data_rows)} rows "
                         f"(total: {processed_count}/{total_files})"
                     )
+                else:
+                    logger.warning(f"[Job {job_id}] No valid data rows to write in this batch")
             
+            except httpx.HTTPStatusError as e:
+                error_detail = e.response.text if e.response else str(e)
+                logger.error(
+                    f"[Job {job_id}] HTTP error writing batch to spreadsheet: {e.response.status_code} - {error_detail}",
+                    exc_info=True
+                )
+                # Continue processing even if spreadsheet write fails
             except Exception as e:
                 logger.error(f"[Job {job_id}] Error writing batch to spreadsheet: {str(e)}", exc_info=True)
+                # Continue processing even if spreadsheet write fails
             
-            # Update progress
+            # Update progress (preserve timestamps)
             results.extend(batch_results)
             progress = int((processed_count / total_files) * 100) if total_files > 0 else 0
+            
+            status_data = {
+                "status": "processing",
+                "progress": progress,
+                "total_files": total_files,
+                "processed_files": processed_count,
+                "spreadsheet_id": spreadsheet_id
+            }
+            if created_at:
+                status_data["created_at"] = created_at
+            if started_at:
+                status_data["started_at"] = started_at
             
             redis_client.setex(
                 f"job:{job_id}:status",
                 3600,
-                json.dumps({
-                    "status": "processing",
+                json.dumps(status_data)
+            )
+            
+            # Check if task was revoked (Celery 5.x uses request.is_aborted property)
+            if hasattr(self.request, 'is_aborted') and self.request.is_aborted:
+                logger.warning(f"[Job {job_id}] Task was revoked")
+                completed_at = datetime.utcnow().isoformat() + "Z"
+                duration_seconds = time.time() - start_time
+                
+                status_data = {
+                    "status": "revoked",
                     "progress": progress,
                     "total_files": total_files,
                     "processed_files": processed_count,
-                    "spreadsheet_id": spreadsheet_id
-                })
-            )
-            
-            # Check if task was revoked
-            if self.is_aborted():
-                logger.warning(f"[Job {job_id}] Task was revoked")
+                    "spreadsheet_id": spreadsheet_id,
+                    "completed_at": completed_at,
+                    "duration_seconds": round(duration_seconds, 2)
+                }
+                if created_at:
+                    status_data["created_at"] = created_at
+                if started_at:
+                    status_data["started_at"] = started_at
+                
                 redis_client.setex(
                     f"job:{job_id}:status",
                     3600,
-                    json.dumps({
-                        "status": "revoked",
-                        "progress": progress,
-                        "total_files": total_files,
-                        "processed_files": processed_count,
-                        "spreadsheet_id": spreadsheet_id
-                    })
+                    json.dumps(status_data)
                 )
                 return {"status": "revoked", "results_count": len(results)}
         
         # Store final results
         redis_client.setex(f"job:{job_id}:results", 3600, json.dumps(results))
         
-        # Update final status
+        # Calculate completion time and duration
+        completed_at = datetime.utcnow().isoformat() + "Z"
+        duration_seconds = time.time() - start_time
+        
+        # Update final status with completion timestamp and duration
+        status_data = {
+            "status": "completed",
+            "progress": 100,
+            "total_files": total_files,
+            "processed_files": processed_count,
+            "spreadsheet_id": spreadsheet_id,
+            "results_count": len(results),
+            "completed_at": completed_at,
+            "duration_seconds": round(duration_seconds, 2)
+        }
+        if created_at:
+            status_data["created_at"] = created_at
+        if started_at:
+            status_data["started_at"] = started_at
+        
         redis_client.setex(
             f"job:{job_id}:status",
             3600,
-            json.dumps({
-                "status": "completed",
-                "progress": 100,
-                "total_files": total_files,
-                "processed_files": processed_count,
-                "spreadsheet_id": spreadsheet_id,
-                "results_count": len(results)
-            })
+            json.dumps(status_data)
         )
         
         logger.info(f"[Job {job_id}] Completed processing {len(results)} files")
@@ -358,16 +432,28 @@ def batch_parse_task(
     
     except Exception as e:
         logger.error(f"[Job {job_id}] Unexpected error: {str(e)}", exc_info=True)
+        completed_at = datetime.utcnow().isoformat() + "Z"
+        duration_seconds = time.time() - start_time if 'start_time' in locals() else None
+        
+        status_data = {
+            "status": "failed",
+            "error": str(e),
+            "total_files": total_files,
+            "processed_files": processed_count,
+            "spreadsheet_id": spreadsheet_id,
+            "completed_at": completed_at
+        }
+        if duration_seconds is not None:
+            status_data["duration_seconds"] = round(duration_seconds, 2)
+        if created_at:
+            status_data["created_at"] = created_at
+        if started_at:
+            status_data["started_at"] = started_at
+        
         redis_client.setex(
             f"job:{job_id}:status",
             3600,
-            json.dumps({
-                "status": "failed",
-                "error": str(e),
-                "total_files": total_files,
-                "processed_files": processed_count,
-                "spreadsheet_id": spreadsheet_id
-            })
+            json.dumps(status_data)
         )
         raise
 

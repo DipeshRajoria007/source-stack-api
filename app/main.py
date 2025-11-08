@@ -427,6 +427,10 @@ async def submit_batch_parse_job(
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
     redis_client = redis.from_url(redis_url, decode_responses=True)
     
+    # Get current timestamp in ISO format
+    from datetime import datetime
+    created_at = datetime.utcnow().isoformat() + "Z"
+    
     redis_client.setex(
         f"job:{job_id}:status",
         3600,  # 1 hour TTL
@@ -435,7 +439,8 @@ async def submit_batch_parse_job(
             "progress": 0,
             "total_files": 0,
             "processed_files": 0,
-            "spreadsheet_id": request.spreadsheet_id
+            "spreadsheet_id": request.spreadsheet_id,
+            "created_at": created_at
         })
     )
     
@@ -457,7 +462,9 @@ async def submit_batch_parse_job(
     
     except Exception as e:
         logger.error(f"Error submitting job {job_id}: {str(e)}", exc_info=True)
-        # Update status to failed
+        # Update status to failed with timestamp
+        from datetime import datetime
+        completed_at = datetime.utcnow().isoformat() + "Z"
         redis_client.setex(
             f"job:{job_id}:status",
             3600,
@@ -466,7 +473,9 @@ async def submit_batch_parse_job(
                 "error": str(e),
                 "progress": 0,
                 "total_files": 0,
-                "processed_files": 0
+                "processed_files": 0,
+                "created_at": created_at,
+                "completed_at": completed_at
             })
         )
         raise HTTPException(

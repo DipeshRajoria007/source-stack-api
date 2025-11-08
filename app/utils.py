@@ -1,5 +1,6 @@
 # sourcestack-api/app/utils.py
 import httpx
+import urllib.parse
 from typing import Optional, List, Dict, Any
 import logging
 
@@ -151,18 +152,33 @@ async def write_to_spreadsheet(
                     rows_to_append = values[1:] if len(values) > 1 else []
                 
                 if rows_to_append:
-                    url = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/A:append"
-                    params = {
-                        "valueInputOption": "USER_ENTERED",
-                        "insertDataOption": "INSERT_ROWS"
-                    }
-                    body = {
-                        "values": rows_to_append
-                    }
-                    async with httpx.AsyncClient(timeout=30.0) as client:
-                        response = await client.post(url, headers=headers, params=params, json=body)
-                        response.raise_for_status()
-                    return
+                    # Filter out completely empty rows
+                    rows_to_append = [row for row in rows_to_append if any(cell for cell in row)]
+                    
+                    if rows_to_append:
+                        # Use proper range format for append: A1 works for default sheet
+                        # For append operation, Google Sheets API requires a valid A1 notation
+                        # Using A1 will append to the first sheet starting from column A
+                        range_name = "A1"  # Valid A1 notation for append
+                        encoded_range = urllib.parse.quote(range_name, safe='')
+                        url = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/{encoded_range}:append"
+                        params = {
+                            "valueInputOption": "USER_ENTERED",
+                            "insertDataOption": "INSERT_ROWS"
+                        }
+                        body = {
+                            "values": rows_to_append
+                        }
+                        async with httpx.AsyncClient(timeout=30.0) as client:
+                            response = await client.post(url, headers=headers, params=params, json=body)
+                            if response.status_code != 200:
+                                error_detail = response.text
+                                logger.error(f"Google Sheets API error: {response.status_code} - {error_detail}")
+                            response.raise_for_status()
+                        return
+                    else:
+                        logger.warning("All rows were empty, skipping write")
+                        return
                 else:
                     return  # No data to append
         else:

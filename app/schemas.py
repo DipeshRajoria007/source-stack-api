@@ -34,6 +34,10 @@ class JobStatus(BaseModel):
     spreadsheet_id: Optional[str] = None
     results_count: Optional[int] = None
     error: Optional[str] = None
+    created_at: Optional[str] = Field(None, description="ISO timestamp when job was created")
+    started_at: Optional[str] = Field(None, description="ISO timestamp when job started processing")
+    completed_at: Optional[str] = Field(None, description="ISO timestamp when job completed")
+    duration_seconds: Optional[float] = Field(None, description="Total duration in seconds (calculated when completed)")
 
 class JobSubmitResponse(BaseModel):
     """Response when submitting a job."""
