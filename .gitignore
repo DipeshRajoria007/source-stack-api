@@ -1,0 +1,127 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+pip-wheel-metadata/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+test-results/
+
+# Type checker caches
+.mypy_cache/
+.pyre/
+.pytype/
+
+# Jupyter/IPython
+.ipynb_checkpoints
+profile_default/
+ipython_config.py
+
+# PyBuilder
+target/
+
+# Pyenv / PDM / Poetry / Pipenv
+.python-version
+.pdm.toml
+.pdm-python
+Pipfile.lock
+poetry.lock
+
+# Local virtual environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+python_env/
+
+# Environment variable definitions
+.env
+.env.*
+!.env.example
+
+# Editor & IDE settings
+.idea/
+.vscode/
+*.code-workspace
+
+# Operating system clutter
+.DS_Store
+Thumbs.db
+
+# Logs & temp files
+logs/
+*.log
+*.out
+*.err
+*.pid
+*.seed
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# Database and cache artifacts
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+
+# Task queue state
+celerybeat-schedule
+celerybeat.pid
+
+# Local application data
+.pytest_cache/
+.ruff_cache/
+.coverage.*
+.scannerwork/
+
+# Downloaded assets / user uploads
+downloads/
+tmp/
+temp/
+
+# FastAPI / Uvicorn reload artifacts
+*.reload
