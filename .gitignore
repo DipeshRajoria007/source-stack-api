@@ -125,3 +125,7 @@ temp/
 
 # FastAPI / Uvicorn reload artifacts
 *.reload
+
+# Temporary CodeBuild configuration files
+codebuild-*.json
+update-codebuild-project.json

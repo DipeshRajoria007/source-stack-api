@@ -125,29 +125,102 @@ if aws codebuild describe-projects --names $PROJECT_NAME --region $AWS_REGION &>
 else
     echo "Creating new CodeBuild project..."
     
-    # For GitHub source (update with your repo)
-    # aws codebuild create-project \
-    #     --name $PROJECT_NAME \
-    #     --source type=GITHUB,location=https://github.com/YOUR_USERNAME/YOUR_REPO.git,buildspec=$BUILDSPEC_PATH \
-    #     --artifacts type=NO_ARTIFACTS \
-    #     --environment type=LINUX_CONTAINER,image=aws/codebuild/standard:7.0,computeType=BUILD_GENERAL1_SMALL,privilegedMode=true \
-    #     --service-role $ROLE_ARN \
-    #     --region $AWS_REGION \
-    #     --timeout-in-minutes 60
+    # Use GitHub source (detect from git remote if available)
+    GITHUB_REPO=""
+    if command -v git &> /dev/null && git remote get-url origin &> /dev/null; then
+        GIT_REMOTE=$(git remote get-url origin)
+        # Convert SSH URL to HTTPS if needed
+        if [[ $GIT_REMOTE == git@github.com:* ]]; then
+            GITHUB_REPO=$(echo $GIT_REMOTE | sed 's|git@github.com:|https://github.com/|' | sed 's|\.git$|.git|')
+        elif [[ $GIT_REMOTE == https://github.com/* ]]; then
+            GITHUB_REPO=$GIT_REMOTE
+        fi
+    fi
     
-    # For S3 source (easier for manual builds)
-    echo "Creating project with S3 source (you'll upload source manually)..."
+    if [ -z "$GITHUB_REPO" ]; then
+        echo "GitHub repo not detected. Using S3 source..."
+        echo "Creating S3 bucket first..."
+        
+        # Create S3 bucket if it doesn't exist
+        BUCKET_NAME="sourcestack-api-source"
+        if ! aws s3 ls "s3://$BUCKET_NAME" 2>&1 | grep -q 'NoSuchBucket'; then
+            echo "Bucket $BUCKET_NAME already exists"
+        else
+            aws s3 mb "s3://$BUCKET_NAME" --region $AWS_REGION || echo "Bucket creation failed or already exists"
+        fi
+        
+        # Create temporary JSON file for project configuration with S3 source
+        cat > /tmp/codebuild-project.json <<EOF
+{
+  "name": "$PROJECT_NAME",
+  "source": {
+    "type": "S3",
+    "location": "$BUCKET_NAME/build.zip",
+    "buildspec": "$BUILDSPEC_PATH"
+  },
+  "artifacts": {
+    "type": "NO_ARTIFACTS"
+  },
+  "environment": {
+    "type": "LINUX_CONTAINER",
+    "image": "aws/codebuild/standard:7.0",
+    "computeType": "BUILD_GENERAL1_SMALL",
+    "privilegedMode": true,
+    "environmentVariables": [
+      {
+        "name": "AWS_ACCOUNT_ID",
+        "value": "$AWS_ACCOUNT_ID"
+      },
+      {
+        "name": "AWS_DEFAULT_REGION",
+        "value": "$AWS_REGION"
+      }
+    ]
+  },
+  "serviceRole": "$ROLE_ARN",
+  "timeoutInMinutes": 60
+}
+EOF
+    else
+        echo "Using GitHub source: $GITHUB_REPO"
+        
+        # Create temporary JSON file for project configuration with GitHub source
+        cat > /tmp/codebuild-project.json <<EOF
+{
+  "name": "$PROJECT_NAME",
+  "source": {
+    "type": "GITHUB",
+    "location": "$GITHUB_REPO",
+    "buildspec": "$BUILDSPEC_PATH"
+  },
+  "artifacts": {
+    "type": "NO_ARTIFACTS"
+  },
+  "environment": {
+    "type": "LINUX_CONTAINER",
+    "image": "aws/codebuild/standard:7.0",
+    "computeType": "BUILD_GENERAL1_SMALL",
+    "privilegedMode": true,
+    "environmentVariables": [
+      {
+        "name": "AWS_ACCOUNT_ID",
+        "value": "$AWS_ACCOUNT_ID"
+      },
+      {
+        "name": "AWS_DEFAULT_REGION",
+        "value": "$AWS_REGION"
+      }
+    ]
+  },
+  "serviceRole": "$ROLE_ARN",
+  "timeoutInMinutes": 60
+}
+EOF
+    fi
     
     aws codebuild create-project \
-        --name $PROJECT_NAME \
-        --source type=S3,location=sourcestack-api-source/build.zip \
-        --artifacts type=NO_ARTIFACTS \
-        --environment type=LINUX_CONTAINER,image=aws/codebuild/standard:7.0,computeType=BUILD_GENERAL1_SMALL,privilegedMode=true \
-        --service-role $ROLE_ARN \
-        --region $AWS_REGION \
-        --timeout-in-minutes 60 \
-        --environment-variables name=AWS_ACCOUNT_ID,value=$AWS_ACCOUNT_ID name=AWS_DEFAULT_REGION,value=$AWS_REGION \
-        --buildspec $BUILDSPEC_PATH
+        --cli-input-json file:///tmp/codebuild-project.json \
+        --region $AWS_REGION
     
     echo "✓ Created CodeBuild project"
 fi

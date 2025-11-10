@@ -1,7 +1,9 @@
 #!/bin/bash
 
 # SourceStack API Deployment Script
-# This script helps deploy to AWS ECS
+# NOTE: This script is for manual local builds. 
+# CodeBuild automatically builds and pushes images on every GitHub push.
+# Use update-ecs-service.sh to update ECS services with CodeBuild images.
 
 set -e
 
@@ -12,7 +14,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Configuration
-AWS_REGION=${AWS_REGION:-us-east-1}
+AWS_REGION=${AWS_REGION:-ap-south-1}
 ECR_REPO_NAME="source-stack-api"
 IMAGE_TAG=${IMAGE_TAG:-latest}
 
@@ -74,16 +76,22 @@ docker push ${ECR_REPO_URI}:${IMAGE_TAG}
 echo ""
 echo -e "${GREEN}✓ Image pushed successfully!${NC}"
 echo ""
+echo -e "${YELLOW}Note: CodeBuild automatically builds images on GitHub push.${NC}"
+echo -e "${YELLOW}For production, use CodeBuild instead of this script.${NC}"
+echo ""
 echo -e "${YELLOW}Next steps:${NC}"
-echo "1. Update ecs-task-definition.json with:"
-echo "   - Image URI: ${ECR_REPO_URI}:${IMAGE_TAG}"
-echo "   - Your AWS account ID in IAM role ARNs"
-echo "   - Environment variables (API_KEY, REDIS_URL, etc.)"
+echo "1. Update ECS service to use the new image:"
+echo "   ./update-ecs-service.sh"
 echo ""
-echo "2. Register task definition:"
+echo "2. Or manually update ECS service:"
+echo "   aws ecs update-service \\"
+echo "     --cluster sourcestack-cluster \\"
+echo "     --service sourcestack-api-service \\"
+echo "     --force-new-deployment \\"
+echo "     --region ${AWS_REGION}"
+echo ""
+echo "3. Register/update task definition (if needed):"
 echo "   aws ecs register-task-definition --cli-input-json file://ecs-task-definition.json --region ${AWS_REGION}"
-echo ""
-echo "3. Create or update ECS service (see DEPLOYMENT.md for details)"
 echo ""
 echo -e "${GREEN}Deployment script completed!${NC}"
 

@@ -9,7 +9,7 @@
   "containerDefinitions": [
     {
       "name": "sourcestack-worker",
-      "image": "YOUR_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/source-stack-api:latest",
+      "image": "YOUR_ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com/source-stack-api:latest",
       "essential": true,
       "command": [
         "celery",
@@ -53,7 +53,7 @@
         "logDriver": "awslogs",
         "options": {
           "awslogs-group": "/ecs/sourcestack-worker",
-          "awslogs-region": "us-east-1",
+          "awslogs-region": "ap-south-1",
           "awslogs-stream-prefix": "ecs"
         }
       }

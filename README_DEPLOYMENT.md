@@ -21,8 +21,10 @@ This document provides an overview of the deployment setup for SourceStack API.
 
 ### Scripts
 
-1. **`deploy.sh`** - Automated script to build and push Docker image to ECR
-2. **`iam-setup.sh`** - Creates necessary IAM roles and CloudWatch log groups
+1. **`deploy.sh`** - Manual script to build and push Docker image to ECR (for local builds)
+2. **`update-ecs-service.sh`** - Updates ECS services to use latest CodeBuild image
+3. **`setup-codebuild.sh`** - Sets up CodeBuild for automated CI/CD
+4. **`iam-setup.sh`** - Creates necessary IAM roles and CloudWatch log groups
 
 ### Documentation
 
@@ -32,41 +34,69 @@ This document provides an overview of the deployment setup for SourceStack API.
 
 ## Quick Start Commands
 
-### 1. Set Up IAM Roles
+### 1. Set Up CodeBuild (Automated CI/CD) - Recommended
+```bash
+./setup-codebuild.sh
+```
+This sets up CodeBuild to automatically build and push Docker images on every GitHub push.
+
+### 2. Set Up IAM Roles
 ```bash
 ./iam-setup.sh
 ```
 
-### 2. Build and Push Docker Image
+### 3. Update ECS Service to Use CodeBuild Image
+```bash
+./update-ecs-service.sh
+```
+
+### 4. Manual Build (Alternative)
+If you need to build locally instead of using CodeBuild:
 ```bash
 ./deploy.sh
 ```
 
-### 3. Follow QUICK_START_AWS.md for remaining steps
+### 5. Follow QUICK_START_AWS.md for remaining steps
 
 ## Architecture
 
 ```
-┌─────────────────┐
-│   Internet      │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  Load Balancer  │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐      ┌──────────────┐
-│  ECS Fargate    │◄────►│  ElastiCache │
-│  (FastAPI)      │      │  (Redis)     │
-└─────────────────┘      └──────────────┘
-         │
-         ▼
-┌─────────────────┐
-│  ECS Fargate    │
-│  (Celery Worker)│
-└─────────────────┘
+┌──────────────┐
+│   GitHub     │
+└──────┬───────┘
+       │ Push
+       ▼
+┌──────────────┐
+│  CodeBuild   │──┐
+└──────┬───────┘  │ Build & Push
+       │          │
+       ▼          ▼
+┌──────────────┐  ┌──────────────┐
+│     ECR      │◄─┘  Docker Image│
+└──────┬───────┘     └──────────────┘
+       │
+       │ Pull
+       ▼
+┌──────────────┐
+│   Internet   │
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐
+│ Load Balancer│
+└──────┬───────┘
+       │
+       ▼
+┌──────────────┐      ┌──────────────┐
+│  ECS Fargate │◄────►│  ElastiCache │
+│  (FastAPI)   │      │  (Redis)     │
+└──────┬───────┘      └──────────────┘
+       │
+       ▼
+┌──────────────┐
+│  ECS Fargate │
+│ (Celery Worker)│
+└──────────────┘
 ```
 
 ## Cost Estimate
@@ -87,13 +117,23 @@ This leaves plenty of credit for scaling and additional services.
 - Docker installed
 - Basic terminal/command line knowledge
 
+## CI/CD Pipeline
+
+**CodeBuild is already configured!** Every time you push to GitHub:
+1. CodeBuild automatically builds the Docker image
+2. Image is pushed to ECR with `latest` and commit hash tags
+3. Use `update-ecs-service.sh` to deploy the new image to ECS
+
+To enable automatic deployments on push, set up GitHub webhooks in CodeBuild console.
+
 ## Next Steps After Deployment
 
-1. Set up HTTPS with ACM certificate
-2. Configure custom domain
-3. Set up CI/CD pipeline
+1. ✅ CI/CD pipeline (CodeBuild) - Already set up!
+2. Set up HTTPS with ACM certificate
+3. Configure custom domain
 4. Configure monitoring and alerts
 5. Set up auto-scaling
+6. Enable automatic ECS deployments via webhooks
 
 ## Need Help?
 
