@@ -1,4 +1,5 @@
-FROM python:3.11-slim
+# Use ECR Public Gallery to avoid Docker Hub rate limits
+FROM public.ecr.aws/docker/library/python:3.11-slim
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
