@@ -1,0 +1,18 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo "Setting up CodeBuild project for SourceStack API..."
+      - echo "AWS Account ID: $AWS_ACCOUNT_ID"
+      - echo "AWS Region: $AWS_DEFAULT_REGION"
+      - chmod +x setup-codebuild.sh
+  build:
+    commands:
+      - echo "Running CodeBuild setup script..."
+      - ./setup-codebuild.sh
+  post_build:
+    commands:
+      - echo "CodeBuild setup completed!"
+      - echo "You can now use the project 'sourcestack-api-build' to build Docker images"
+
