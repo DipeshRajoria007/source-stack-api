@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - API_KEY=${API_KEY:-dev-api-key}
+      - REDIS_URL=redis://redis:6379/0
+      - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS:-*}
+      - MAX_CONCURRENT_REQUESTS=${MAX_CONCURRENT_REQUESTS:-10}
+      - SPREADSHEET_BATCH_SIZE=${SPREADSHEET_BATCH_SIZE:-100}
+      - MAX_RETRIES=${MAX_RETRIES:-3}
+      - RETRY_DELAY=${RETRY_DELAY:-1.0}
+    depends_on:
+      - redis
+    volumes:
+      - ./app:/app/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+  worker:
+    build: .
+    environment:
+      - API_KEY=${API_KEY:-dev-api-key}
+      - REDIS_URL=redis://redis:6379/0
+      - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS:-*}
+      - MAX_CONCURRENT_REQUESTS=${MAX_CONCURRENT_REQUESTS:-10}
+      - SPREADSHEET_BATCH_SIZE=${SPREADSHEET_BATCH_SIZE:-100}
+      - MAX_RETRIES=${MAX_RETRIES:-3}
+      - RETRY_DELAY=${RETRY_DELAY:-1.0}
+    depends_on:
+      - redis
+    volumes:
+      - ./app:/app/app
+    command: celery -A app.celery_app worker --loglevel=info
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:
+

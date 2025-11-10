@@ -1,0 +1,62 @@
+{
+  "family": "sourcestack-worker",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "sourcestack-worker",
+      "image": "YOUR_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/source-stack-api:latest",
+      "essential": true,
+      "command": [
+        "celery",
+        "-A",
+        "app.celery_app",
+        "worker",
+        "--loglevel=info",
+        "--concurrency=2"
+      ],
+      "environment": [
+        {
+          "name": "API_KEY",
+          "value": "CHANGE_THIS_TO_SECURE_API_KEY"
+        },
+        {
+          "name": "REDIS_URL",
+          "value": "redis://sourcestack-redis.xxxxx.cache.amazonaws.com:6379/0"
+        },
+        {
+          "name": "CORS_ALLOW_ORIGINS",
+          "value": "*"
+        },
+        {
+          "name": "MAX_CONCURRENT_REQUESTS",
+          "value": "10"
+        },
+        {
+          "name": "SPREADSHEET_BATCH_SIZE",
+          "value": "100"
+        },
+        {
+          "name": "MAX_RETRIES",
+          "value": "3"
+        },
+        {
+          "name": "RETRY_DELAY",
+          "value": "1.0"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/sourcestack-worker",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
